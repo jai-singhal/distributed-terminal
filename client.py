@@ -39,16 +39,17 @@ class Client(object):
             ip_cmd = sub_cmnd.split(">", 1)
 
             if not re.search(r"[0-9a-z\.]+[ ]*\>[ ]*.+", sub_cmnd):
-                print(CRED + "Invalid command. Try using IP>cmd")
+                print(CRED + "Invalid command. Try using IP>cmd\n")
                 print(CWHITE2)
                 return None
 
-            ip, cmd = ip_cmd[0], ip_cmd[1]
+            ip, cmd = ip_cmd[0].strip(), ip_cmd[1]
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
-                sock.connect((ip.strip(), PORT))
-            except:
+                sock.connect((ip.strip(), self.port))
+            except Exception as e:
                 print(CRED + "Unable to connect to: \'{}\'. Try again".format(ip))
+                print(e)
                 print(CWHITE2)
                 return None
             toSend = {
@@ -70,12 +71,14 @@ class Client(object):
 
     def handleBasicCommands(self, command):
         ip_cmd = command.split(">", 1)
-        ip, cmd = ip_cmd[0], ip_cmd[1]
+        ip, cmd = ip_cmd[0].strip(), ip_cmd[1]
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        print(ip.strip(), cmd)
         try:
-            sock.connect((ip.strip(), PORT))
-        except:
+            sock.connect((ip.strip(), self.port))
+        except Exception as e:
             print(CRED + "Unable to connect to: \'{}\'. Try again".format(ip))
+            print(e)
             print(CWHITE2)
             return None
         
@@ -118,12 +121,13 @@ class Client(object):
             try:
                 command = input()
             except KeyboardInterrupt:
+                print("KeyboardInterrupt".capitalize())
                 return
                 
             if not command:
                 continue
             if not re.search(r"[0-9a-z\.]+[ ]*\>[ ]*.+", command):
-                print(CRED + "Invalid command. Try using IP>cmd")
+                print(CRED + "Invalid command. Try using IP>cmd\n")
                 continue
             if "||" in command:
                 res = self.handlePipelineCommands(command)
@@ -136,7 +140,7 @@ class Client(object):
 
 
 if __name__ == "__main__":
-    client = Client()
+    client = Client(PORT)
     client.start()
 
 # // 172.17.48.146

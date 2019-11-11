@@ -215,6 +215,7 @@ class Server(CommandRunner):
             try:
                 conn, address = self.socket.accept()
             except KeyboardInterrupt:
+                print("KeyboardInterrupt".capitalize())
                 return
             self.logger.debug("Got connection")
             thread = threading.Thread(target=self.handle, args=(conn, address))
@@ -227,14 +228,14 @@ class Server(CommandRunner):
             # self.logger.debug("Started process %r", process)
 
     def __del__(self):
-        logging.info("Shutting down")
+        pass
+        # logging.info("Shutting down")
         # for process in multiprocessing.active_children():
         #     logging.info("Shutting down process %r", process)
         #     process.terminate()
         #     process.join()
         #     print(process, "terminated")
-
-        logging.info("All done")
+        # logging.info("All done")
 
 if __name__ == "__main__":
     server = Server("0.0.0.0", PORT)
