@@ -9,7 +9,7 @@ from time import sleep
 import base64
 import threading
 
-PORT = 8074
+PORT = 40150
 
 class CommandRunner(object):
     def __init__(self):
@@ -71,9 +71,6 @@ class CommandRunner(object):
                 )
             return p.stdout, p.stderr
         except Exception as e:
-            # echo = command['pvs_stdin'].decode('utf-8')
-            # cmd = "echo {} |  {}".format(echo, command['cmd'])
-            # return self.popen_timeout(cmd, 30)
             return (False, str(e))
         
     @staticmethod
@@ -126,10 +123,9 @@ class CommandRunner(object):
                 logging.exception("Unexpected exception: popen")
         if err:
             if isinstance(err, str):
-                return {"output": "", "error": err}
+                return {"output": "", "error": err.encode()}
             else:
                 return {"output": "", "error": err}
-
 
         if isinstance(out, str):
             out = out.encode()
@@ -171,7 +167,13 @@ class Server(CommandRunner):
     def __init__(self, hostname, port):
         self.logger = logging.getLogger("server")
         self.hostname = hostname
-        self.port = PORT
+        self.port = port
+        logging.basicConfig(
+            filename='server.log', 
+            filemode='w',
+            format='%(name)s - %(levelname)s - %(message)s',
+            level=logging.DEBUG
+        )
 
     def handle(self, connection, address):
         logging.basicConfig(level=logging.DEBUG)
@@ -196,11 +198,11 @@ class Server(CommandRunner):
                     base64_dict = base64.b64encode(str(res).encode('utf-8'))
                     connection.sendall(base64_dict)
                     logger.debug("Sent data")
-                    sys.exit()
         except:
             logger.exception("Problem handling request")
         finally:
             logger.debug("Closing socket")
+            sys.exit()
             connection.close()
 
     def start(self):
@@ -210,38 +212,34 @@ class Server(CommandRunner):
         self.socket.listen(1)
 
         while True:
-            conn, address = self.socket.accept()
+            try:
+                conn, address = self.socket.accept()
+            except KeyboardInterrupt:
+                return
             self.logger.debug("Got connection")
             thread = threading.Thread(target=self.handle, args=(conn, address))
             thread.daemon = True
             thread.start()
             self.logger.debug("Started Thread %r", thread)
-
             # process = multiprocessing.Process(target=self.handle, args=(conn, address))
             # process.daemon = True
             # process.start()
             # self.logger.debug("Started process %r", process)
 
+    def __del__(self):
+        logging.info("Shutting down")
+        # for process in multiprocessing.active_children():
+        #     logging.info("Shutting down process %r", process)
+        #     process.terminate()
+        #     process.join()
+        #     print(process, "terminated")
+
+        logging.info("All done")
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        filename='server.log', 
-        filemode='w',
-        format='%(name)s - %(levelname)s - %(message)s',
-        level=logging.DEBUG
-    )
-
     server = Server("0.0.0.0", PORT)
     try:
         logging.info("Listening")
         server.start()
     except:
         logging.exception("Unexpected exception")
-    finally:
-        logging.info("Shutting down")
-
-        # for process in multiprocessing.active_children():
-        #     logging.info("Shutting down process %r", process)
-        #     process.terminate()
-        #     process.join()
-    logging.info("All done")
