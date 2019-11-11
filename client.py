@@ -1,3 +1,12 @@
+#!/usr/bin/env python
+# client.py
+__author__ = "Jai Singhal"
+__copyright__ = "Copyright 2019"
+__version__ = "1.0.0"
+__maintainer__ = "Jai Singhal"
+__email__ = "jaisinghal48@gmail.com"
+__website__ = "http://jai-singhal.github.io"
+
 import socket
 import re
 import os
@@ -11,28 +20,23 @@ CGREEN  = '\33[32m'
 CBLUE2   = '\33[94m'
 CBEIGE2  = '\33[96m'
 CWHITE2  = '\33[97m'
-PORT = 8074
+
+PORT = 40150
 
 class Client(object):
+    """
+    Client Class
+    """
     def __init__(self, port:int = PORT):
         self.port = port
 
-    @staticmethod
-    def popen_timeout(command:str, timeout:int):
-        p = subprocess.Popen(
-            command, 
-            stdout=subprocess.PIPE, 
-            stderr=subprocess.PIPE
-        )
-        for t in range(timeout):
-            if p.poll() is not None:
-                return p.communicate()
-            sleep(0.1)
-            
-        p.kill()
-        return (False, False)
-
     def handlePipelineCommands(self, command:str):
+        """
+        Handle (||) Commands
+        Args: string  of command which to be run and pvs output
+         which is going to passed as input in this command
+        Returns dict of stdout and stderr if success
+        """
         data_b64 = ""
         for sub_cmnd in command.split("||"):
             sub_cmnd = sub_cmnd.strip()
@@ -69,11 +73,15 @@ class Client(object):
         return data_b64.decode("utf-8")
 
 
-    def handleBasicCommands(self, command):
+    def handleBasicCommands(self, command:str):
+        """
+        Handle Basic Non Pipe Commands
+        Args: command(str) Command which to be run
+        Returns dict of stdout and stderr if success
+        """
         ip_cmd = command.split(">", 1)
         ip, cmd = ip_cmd[0].strip(), ip_cmd[1]
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        print(ip.strip(), cmd)
         try:
             sock.connect((ip.strip(), self.port))
         except Exception as e:
@@ -99,33 +107,35 @@ class Client(object):
         return str()
 
     def decorateTerminal(self):
-        currpath, err = self.popen_timeout("pwd", 2)
-        if not currpath:
-            print("Unable to connect")
-            sys.exit()
-        if not err:
-            currpath = re.sub(r"[\n]", "", currpath.decode("utf-8"))
-            hostname = socket.gethostname() 
-            IPAddr = socket.gethostbyname(hostname) 
-            print(CGREEN + f"{hostname}@{IPAddr}:", end = "")
-            print(CBLUE2 + "~" + currpath, end = "")
-            print(CRED + "(*)")
-
-        print(CBEIGE2 + "> ", end="")
+        """
+        Utility function that prints the host and ip, also
+        the poth at which currently
+        """
+        hostname = socket.gethostname() 
+        IPAddr = socket.gethostbyname(hostname) 
+        print(CGREEN + f"{hostname}@{IPAddr}", end = "")
+        print(CWHITE2 + ":", end="")
+        print(CBLUE2 + "~/", end = "")
+        print(CWHITE2 + "$ ", end = "")
         print(CWHITE2, end="")
         
     def start(self):
+        """
+        Driver function of the Client class.
+        Takes the input from user(command),checks for
+        which type of input, and executes it.
+        """
         os.system('clear')
         while True:
             self.decorateTerminal()
             try:
                 command = input()
             except KeyboardInterrupt:
-                print("KeyboardInterrupt".capitalize())
+                print("\n Client: Keyboard Interrupt".capitalize())
                 return
                 
-            if not command:
-                continue
+            if not command: continue
+
             if not re.search(r"[0-9a-z\.]+[ ]*\>[ ]*.+", command):
                 print(CRED + "Invalid command. Try using IP>cmd\n")
                 continue
@@ -133,10 +143,9 @@ class Client(object):
                 res = self.handlePipelineCommands(command)
             else:
                 res = self.handleBasicCommands(command)
-            if not res:
-                continue
-            else:
-                print(res)
+
+            if not res: continue
+            else: print(res)
 
 
 if __name__ == "__main__":

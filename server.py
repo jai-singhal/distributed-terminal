@@ -1,3 +1,13 @@
+#!/usr/bin/env python
+# server.py
+__author__ = "Jai Singhal"
+__copyright__ = "Copyright 2019"
+__version__ = "1.0.0"
+__maintainer__ = "Jai Singhal"
+__email__ = "jaisinghal48@gmail.com"
+__website__ = "http://jai-singhal.github.io"
+
+
 import multiprocessing
 import socket
 import subprocess
@@ -11,12 +21,19 @@ import threading
 
 PORT = 40150
 
-class CommandRunner(object):
+class CommandExecution(object):
+
     def __init__(self):
         pass
 
     @staticmethod
-    def popen_timeout(command, timeout):
+    def popen_timeout(command:list, timeout:int):
+        """
+        Runs the linux command until the timeout
+        Args: command: list of command and option
+              timeout: timeout time for command
+        Returns tuple of stdout and stderr
+        """
         p = subprocess.Popen(
             command, 
             stdout=subprocess.PIPE, 
@@ -30,7 +47,18 @@ class CommandRunner(object):
         return (False, False)
 
     @staticmethod
-    def popen_stdin_timeout(command, timeout):
+    def popen_stdin_timeout(command:str, timeout:int):
+        """
+        Runs the linux Pipe(|) command using Popen until the
+        timeout, seperated from basic command because the output 
+        is to be maintained after running each sub command
+
+        Args: command: string of command and options
+              timeout: timeout time for command
+        Returns tuple of stdout and stderr if success
+            else return Tuple of (False, False)
+        """
+
         subcmnds = command.split("|")
         p1 = subprocess.Popen(
             subcmnds[0].split(),
@@ -53,6 +81,15 @@ class CommandRunner(object):
 
     @staticmethod
     def run_timeout(command:dict):
+        """
+        Runs the linux command using Run  until the timeout.
+
+        Args: command(dict): dict of command and options, and
+                previous command which use as input to it
+              timeout: timeout time for command
+        Returns tuple of stdout and stderr if success
+            else return Tuple of (False, error)
+        """
         try:
             if command["pvs_stdin"]:
                 p = subprocess.run(
@@ -75,6 +112,17 @@ class CommandRunner(object):
         
     @staticmethod
     def run_stdin_timeout(command:dict):
+        """
+        Runs the linux Pipe(|) command using Popen until the
+        timeout, seperated from basic command because the output 
+        is to be maintained after running each sub command
+
+        Args: command(dict): dict of command and options, and
+                previous command which use as input to it
+              timeout: timeout time for command
+        Returns tuple of stdout and stderr if success
+            else return Tuple of (False, False)
+        """
         subcmnds = command["cmd"].split("|")
         try:
             if command["pvs_stdin"]:
@@ -105,6 +153,18 @@ class CommandRunner(object):
 
 
     def handleNonPipelineCommand(self, cmd_in:str):
+        """
+        Handle Basic Non Pipe Commands
+        Args: command(str) Command which to be run
+        Returns dict of stdout and stderr if success
+        """
+        if re.match(r"cd .+", cmd_in):
+            try:
+                os.chdir(cmd_in.split(" ")[1])
+                return {"output": "".encode(), "error": "".encode()}
+            except OSError as e:
+                return {"output": "".encode(), "error": str(e).encode()}
+
         if "|" in cmd_in:
             try:
                 out, err = self.popen_stdin_timeout(cmd_in, 60)
@@ -127,13 +187,18 @@ class CommandRunner(object):
             else:
                 return {"output": "", "error": err}
 
-        if isinstance(out, str):
-            out = out.encode()
+        if isinstance(out, str): out = out.encode()
 
         return {"output": out, "error": "".encode()}
 
 
     def handlePipelineCommand(self, cmd_in:dict):
+        """
+        Handle (||) Commands
+        Args: command(dict) Command which to be run and pvs output
+         which is going to passed as input in this command
+        Returns dict of stdout and stderr if success
+        """
         if "|" in cmd_in["cmd"]:
             try:
                 out, err = self.run_stdin_timeout(cmd_in)
@@ -163,7 +228,10 @@ class CommandRunner(object):
         return {"output": out, "error": "".encode()}
 
 
-class Server(CommandRunner):
+class Server(CommandExecution):
+    """
+    Server Class inherits CommandExecution
+    """
     def __init__(self, hostname, port):
         self.logger = logging.getLogger("server")
         self.hostname = hostname
@@ -175,7 +243,14 @@ class Server(CommandRunner):
             level=logging.DEBUG
         )
 
-    def handle(self, connection, address):
+    def handle(self, connection:socket.socket, address:tuple):
+        """
+        For each new client connect to the server, executes this.
+        Recieves the command and then sends the output of the given
+        command.
+        Args: socket object and address of the client.
+        return None
+        """
         logging.basicConfig(level=logging.DEBUG)
         logger = logging.getLogger("process-%r" % (address,))
         try:
@@ -196,6 +271,7 @@ class Server(CommandRunner):
                     else:
                         res = self.handleNonPipelineCommand(data_b64["cmd"])
                     base64_dict = base64.b64encode(str(res).encode('utf-8'))
+                    logger.debug(base64_dict)
                     connection.sendall(base64_dict)
                     logger.debug("Sent data")
         except:
@@ -206,6 +282,11 @@ class Server(CommandRunner):
             connection.close()
 
     def start(self):
+        """
+        Driver function of the Server class
+        Listens to the new client and creates new process for 
+        new active client and then terminates after it executes command.
+        """
         self.logger.debug("listening")
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((self.hostname, self.port))
@@ -215,7 +296,9 @@ class Server(CommandRunner):
             try:
                 conn, address = self.socket.accept()
             except KeyboardInterrupt:
-                print("KeyboardInterrupt".capitalize())
+                print("\nServer: Keyboard Interrupt".capitalize())
+                logging.info("Shutting down")
+                logging.info("All done")
                 return
             self.logger.debug("Got connection")
             thread = threading.Thread(target=self.handle, args=(conn, address))
@@ -227,20 +310,13 @@ class Server(CommandRunner):
             # process.start()
             # self.logger.debug("Started process %r", process)
 
-    def __del__(self):
-        pass
-        # logging.info("Shutting down")
-        # for process in multiprocessing.active_children():
-        #     logging.info("Shutting down process %r", process)
-        #     process.terminate()
-        #     process.join()
-        #     print(process, "terminated")
-        # logging.info("All done")
 
 if __name__ == "__main__":
     server = Server("0.0.0.0", PORT)
     try:
         logging.info("Listening")
         server.start()
+        logging.info("Shutting down")
+        logging.info("All done")
     except:
         logging.exception("Unexpected exception")
