@@ -1,0 +1,13 @@
+root - INFO - Listening
+server - DEBUG - listening
+server - DEBUG - Got connection
+process-('127.0.0.1', 53001) - DEBUG - Connected <socket.socket fd=5, family=AddressFamily.AF_INET, type=SocketKind.SOCK_STREAM, proto=0, laddr=('127.0.0.1', 8074), raddr=('127.0.0.1', 53001)> at ('127.0.0.1', 53001)
+server - DEBUG - Started Thread <Thread(Thread-1, started daemon 139845765105408)>
+process-('127.0.0.1', 53001) - DEBUG - Received data {'pvs_stdin': b'', 'cmd': 'ls | grep .py'}
+process-('127.0.0.1', 53001) - DEBUG - Sent data
+process-('127.0.0.1', 53001) - ERROR - Problem handling request
+Traceback (most recent call last):
+  File "server.py", line 200, in handle
+    sys.exit()
+SystemExit
+process-('127.0.0.1', 53001) - DEBUG - Closing socket
