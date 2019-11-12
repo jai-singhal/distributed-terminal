@@ -26,63 +26,85 @@ class LinuxCommandExecuter(object):
     def __init__(self):
         pass
 
-    @staticmethod
-    def popen_timeout(command:list, timeout:int):
-        """
-        Runs the linux command until the timeout
-        Args: command: list of command and option
-              timeout: timeout time for command
-        Returns tuple of stdout and stderr
-        """
-        p = subprocess.Popen(
-            command, 
-            stdout=subprocess.PIPE, 
-            stderr=subprocess.PIPE
-        )
-        for t in range(timeout):
-            if p.poll() is not None:
-                return p.communicate()
-            sleep(0.1)
-        p.kill()
-        logging.exception("Unable to run the command: " + " ".join(command))
-        return (False, False)
+    # @staticmethod
+    # def popen_timeout(command:list, timeout:int):
+    #     """
+    #     Runs the linux command until the timeout
+    #     Args: command: list of command and option
+    #           timeout: timeout time for command
+    #     Returns tuple of stdout and stderr
+    #     """
+    #     p = subprocess.Popen(
+    #         command, 
+    #         stdout=subprocess.PIPE, 
+    #         stderr=subprocess.PIPE
+    #     )
+    #     for t in range(timeout):
+    #         if p.poll() is not None:
+    #             return p.communicate()
+    #         sleep(0.1)
+    #     p.kill()
+    #     logging.exception("Unable to run the command: " + " ".join(command))
+    #     return (False, False)
+
+    # @staticmethod
+    # def popen_stdin_timeout(command:str, timeout:int):
+    #     """
+    #     Runs the linux Pipe(|) command using Popen until the
+    #     timeout, seperated from basic command because the output 
+    #     is to be maintained after running each sub command
+
+    #     Args: command: string of command and options
+    #           timeout: timeout time for command
+    #     Returns tuple of stdout and stderr if success
+    #         else return Tuple of (False, False)
+    #     """
+
+    #     subcmnds = command.split("|")
+    #     p1 = subprocess.Popen(
+    #         subcmnds[0].split(),
+    #         stdout=subprocess.PIPE,
+    #     )
+    #     pvs_stdin = p1.stdout
+    #     for subcmd in subcmnds[1:]:
+    #         p2 = subprocess.Popen(
+    #             subcmd.split(),
+    #             stdin=pvs_stdin,
+    #             stdout=subprocess.PIPE,
+    #         )
+    #         pvs_stdin = p2.stdout
+    #     for t in range(timeout):
+    #         if p2.poll() is not None:
+    #             return p2.communicate()
+    #         sleep(0.1)
+    #     p2.kill()
+    #     logging.exception("Unable to run the command: " + " ".join(command))
+    #     return (False, False)
 
     @staticmethod
-    def popen_stdin_timeout(command:str, timeout:int):
-        """
-        Runs the linux Pipe(|) command using Popen until the
-        timeout, seperated from basic command because the output 
-        is to be maintained after running each sub command
+    def subprocess_run(command:str, input_stdin:str = None):
+        try:
+            p = subprocess.Popen(
+                    command.split(), 
+                    stdin = subprocess.PIPE,
+                    encoding="utf-8",
+                    shell=True, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE,
+                    # timeout=1
+                )
 
-        Args: command: string of command and options
-              timeout: timeout time for command
-        Returns tuple of stdout and stderr if success
-            else return Tuple of (False, False)
-        """
+            if input_stdin is not None:
+                p.stdin.write(input_stdin)
+            for t in range(30):
+                if p.poll() is not None:
+                    return p.communicate()
+                sleep(0.1)
+            p.kill()
+        except Exception as e:
+            return (False, str(e))      
 
-        subcmnds = command.split("|")
-        p1 = subprocess.Popen(
-            subcmnds[0].split(),
-            stdout=subprocess.PIPE,
-        )
-        pvs_stdin = p1.stdout
-        for subcmd in subcmnds[1:]:
-            p2 = subprocess.Popen(
-                subcmd.split(),
-                stdin=pvs_stdin,
-                stdout=subprocess.PIPE,
-            )
-            pvs_stdin = p2.stdout
-        for t in range(timeout):
-            if p2.poll() is not None:
-                return p2.communicate()
-            sleep(0.1)
-        p2.kill()
-        logging.exception("Unable to run the command: " + " ".join(command))
-        return (False, False)
-
-    @staticmethod
-    def run_timeout(command:dict):
+    def run_nonpipe_command(self, command: str, pvs_stdin: str =  None):
         """
         Runs the linux command using Run  until the timeout.
 
@@ -93,31 +115,13 @@ class LinuxCommandExecuter(object):
             else return Tuple of (False, error)
         """
         try:
-            if command["pvs_stdin"].decode("utf-8"):
-                p = subprocess.run(
-                    command["cmd"].decode("utf-8"), 
-                    input = command["pvs_stdin"].decode("utf-8"),
-                    encoding="utf-8",
-                    shell=True, check=True,
-                    stdout=subprocess.PIPE, 
-                    stderr=subprocess.PIPE
-                )
-            else:
-                p = subprocess.run(
-                    command["cmd"].decode("utf-8"), 
-                    encoding="utf-8",
-                    shell=True, check=True,
-                    stdout=subprocess.PIPE, 
-                    stderr=subprocess.PIPE
-                )
-            return p.stdout, p.stderr
+            return self.subprocess_run(command, pvs_stdin)
         except Exception as e:
-            logging.exception("Unexpected exception: run_timeout")
+            logging.exception("Unexpected exception: run_nonpipe_command")
             logging.exception(str(e))
             return (False, str(e))
         
-    @staticmethod
-    def run_stdin_timeout(command:dict):
+    def run_pipe_command(self, command: str, pvs_stdin: str =  None):
         """
         Runs the linux Pipe(|) command using Popen until the
         timeout, seperated from basic command because the output 
@@ -129,35 +133,18 @@ class LinuxCommandExecuter(object):
         Returns tuple of stdout and stderr if success
             else return Tuple of (False, False)
         """
-        subcmnds = command["cmd"].decode("utf-8").split("|")
+        subcmnds = command.split("|")
         try:
-            if command["pvs_stdin"].decode("utf-8"):
-                p1 = subprocess.run(
-                    subcmnds[0].split(),
-                    input = command["pvs_stdin"].decode("utf-8"),
-                    shell=True, check=True,
-                    encoding="utf-8",
-                    stdout = subprocess.PIPE,
-                )
-            else:
-                p1 = subprocess.run(
-                    subcmnds[0].split(),
-                    stdout = subprocess.PIPE,
-                )
-            pvs_stdin = p1.stdout
-            for subcmd in subcmnds[1:]:
-                p2 = subprocess.Popen(
-                    subcmd.split(),
-                    stdin=pvs_stdin,
-                    encoding="utf-8",
-                    shell=True, check=True,
-                    stdout=subprocess.PIPE,
-                )
-                pvs_stdin = p2.stdout
-            return p2.stdout, p2.stderr
-
+            pvs_stdin = None
+            for subcmd in subcmnds:
+                if isinstance(pvs_stdin, bytes):
+                    pvs_stdin = pvs_stdin.decode("utf-8")
+                pvs_stdin, p_error = self.subprocess_run(subcmd.strip(), pvs_stdin)
+                print(pvs_stdin, p_error)
+                if not pvs_stdin: return False, p_error
+            return pvs_stdin, p_error
         except Exception as e:
-            logging.exception("Unexpected exception: run_stdin_timeout")
+            logging.exception("Unexpected exception: run_pipe_command")
             logging.exception(str(e))
             return (False, str(e))
 
@@ -170,25 +157,21 @@ class LinuxCommandExecuter(object):
         """
         if re.match(r"cd .+", cmd_in):
             try:
-                os.chdir(cmd_in.split(" ")[1])
+                os.chdir(cmd_in.split(" ", 1)[1])
                 return {"output": "".encode(), "error": "".encode()}
             except OSError as e:
                 return {"output": "".encode(), "error": str(e).encode()}
 
         if "|" in cmd_in:
             try:
-                out, err = self.popen_stdin_timeout(cmd_in, 30)
-                if out == False:
-                    err = "Cannot able to run this command"
+                out, err = self.run_pipe_command(cmd_in)
             except Exception as e:
                 err = str(e)
                 logging.exception("Unexpected exception: popen")
                 logging.exception(err)
         else:
             try:
-                out, err = self.popen_timeout(cmd_in.split(), 30)
-                if out == False:
-                    err = "Cannot able to run this command"
+                out, err = self.run_nonpipe_command(cmd_in)
             except Exception as e:
                 err = str(e)
                 logging.exception("Unexpected exception: popen")
@@ -204,27 +187,22 @@ class LinuxCommandExecuter(object):
         return {"output": out, "error": "".encode()}
 
 
-    def handlePipelineCommand(self, cmd_in:dict):
+    def handlePipelineCommand(self, command:str, pvs_stdin:str):
         """
         Handle (||) Commands
         Args: command(dict) Command which to be run and pvs output
          which is going to passed as input in this command
         Returns dict of stdout and stderr if success
         """
-        if "|" in cmd_in["cmd"].decode():
+        if "|" in command:
             try:
-                out, err = self.run_stdin_timeout(cmd_in)
-                if out == False:
-                    err = "Cannot able to run this command"
+                out, err = self.run_pipe_command(command, pvs_stdin)
             except Exception as e:
                 err = str(e)
                 logging.exception("Unexpected exception: run_stdnin")
         else:
             try:
-                out, err = self.run_timeout(cmd_in)
-                if out == False:
-                    if not err:
-                        err = "Cannot able to run this command"
+                out, err = self.run_nonpipe_command(command, pvs_stdin)
             except Exception as e:
                 err = str(e)
                 logging.exception("Unexpected exception: run_stdnin")
@@ -288,9 +266,12 @@ class Server(LinuxCommandExecuter):
             if data_b64:
                 logger.debug("Received Data from client: %r" %(data_b64,))
                 if data_b64["pvs_stdin"].decode("utf-8"):
-                    res = self.handlePipelineCommand(data_b64)
+                    command = data_b64["cmd"].decode("utf-8")
+                    pvs_stdin = data_b64["pvs_stdin"].decode("utf-8")
+                    res = self.handlePipelineCommand(command, pvs_stdin)
                 else:
-                    res = self.handleNonPipelineCommand(data_b64["cmd"].decode("utf-8"))
+                    command = data_b64["cmd"].decode("utf-8")
+                    res = self.handleNonPipelineCommand(command)
                 base64_dict = base64.b64encode(str(res).encode('utf-8'))
                 connection.sendall(base64_dict)
                 logger.debug("Data is Sent to %r" %(address,))
