@@ -106,13 +106,23 @@ class Client(object):
                 return data_b64["output"].decode("utf-8")
         return str()
 
+    @staticmethod
+    def get_ip_address():
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+
     def decorateTerminal(self):
         """
         Utility function that prints the host and ip, also
         the poth at which currently
         """
         hostname = socket.gethostname() 
-        IPAddr = socket.gethostbyname(hostname) 
+        try:
+            IPAddr = self.get_ip_address()
+        except:
+            IPAddr = socket.gethostbyname(hostname)
+            
         print(CGREEN + f"{hostname}@{IPAddr}", end = "")
         print(CWHITE2 + ":", end="")
         print(CBLUE2 + "~/", end = "")
