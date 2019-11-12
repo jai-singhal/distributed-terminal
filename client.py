@@ -161,5 +161,3 @@ class Client(object):
 if __name__ == "__main__":
     client = Client(PORT)
     client.start()
-
-# // 172.17.48.146
