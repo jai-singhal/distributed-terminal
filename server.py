@@ -21,7 +21,7 @@ import threading
 
 PORT = 40150
 
-class CommandExecution(object):
+class LinuxCommandExecuter(object):
 
     def __init__(self):
         pass
@@ -44,6 +44,7 @@ class CommandExecution(object):
                 return p.communicate()
             sleep(0.1)
         p.kill()
+        logging.exception("Unable to run the command: " + " ".join(command))
         return (False, False)
 
     @staticmethod
@@ -77,6 +78,7 @@ class CommandExecution(object):
                 return p2.communicate()
             sleep(0.1)
         p2.kill()
+        logging.exception("Unable to run the command: " + " ".join(command))
         return (False, False)
 
     @staticmethod
@@ -91,23 +93,27 @@ class CommandExecution(object):
             else return Tuple of (False, error)
         """
         try:
-            if command["pvs_stdin"]:
+            if command["pvs_stdin"].decode("utf-8"):
                 p = subprocess.run(
-                    command["cmd"], 
+                    command["cmd"].decode("utf-8"), 
                     input = command["pvs_stdin"].decode("utf-8"),
                     encoding="utf-8",
+                    shell=True, check=True,
                     stdout=subprocess.PIPE, 
                     stderr=subprocess.PIPE
                 )
             else:
                 p = subprocess.run(
-                    command["cmd"], 
+                    command["cmd"].decode("utf-8"), 
                     encoding="utf-8",
+                    shell=True, check=True,
                     stdout=subprocess.PIPE, 
                     stderr=subprocess.PIPE
                 )
             return p.stdout, p.stderr
         except Exception as e:
+            logging.exception("Unexpected exception: run_timeout")
+            logging.exception(str(e))
             return (False, str(e))
         
     @staticmethod
@@ -123,12 +129,13 @@ class CommandExecution(object):
         Returns tuple of stdout and stderr if success
             else return Tuple of (False, False)
         """
-        subcmnds = command["cmd"].split("|")
+        subcmnds = command["cmd"].decode("utf-8").split("|")
         try:
-            if command["pvs_stdin"]:
+            if command["pvs_stdin"].decode("utf-8"):
                 p1 = subprocess.run(
                     subcmnds[0].split(),
                     input = command["pvs_stdin"].decode("utf-8"),
+                    shell=True, check=True,
                     encoding="utf-8",
                     stdout = subprocess.PIPE,
                 )
@@ -143,12 +150,15 @@ class CommandExecution(object):
                     subcmd.split(),
                     stdin=pvs_stdin,
                     encoding="utf-8",
+                    shell=True, check=True,
                     stdout=subprocess.PIPE,
                 )
                 pvs_stdin = p2.stdout
             return p2.stdout, p2.stderr
 
         except Exception as e:
+            logging.exception("Unexpected exception: run_stdin_timeout")
+            logging.exception(str(e))
             return (False, str(e))
 
 
@@ -167,20 +177,22 @@ class CommandExecution(object):
 
         if "|" in cmd_in:
             try:
-                out, err = self.popen_stdin_timeout(cmd_in, 60)
+                out, err = self.popen_stdin_timeout(cmd_in, 30)
                 if out == False:
                     err = "Cannot able to run this command"
             except Exception as e:
                 err = str(e)
                 logging.exception("Unexpected exception: popen")
+                logging.exception(err)
         else:
             try:
-                out, err = self.popen_timeout(cmd_in.split(), 60)
+                out, err = self.popen_timeout(cmd_in.split(), 30)
                 if out == False:
                     err = "Cannot able to run this command"
             except Exception as e:
                 err = str(e)
                 logging.exception("Unexpected exception: popen")
+                logging.exception(err)
         if err:
             if isinstance(err, str):
                 return {"output": "", "error": err.encode()}
@@ -199,7 +211,7 @@ class CommandExecution(object):
          which is going to passed as input in this command
         Returns dict of stdout and stderr if success
         """
-        if "|" in cmd_in["cmd"]:
+        if "|" in cmd_in["cmd"].decode():
             try:
                 out, err = self.run_stdin_timeout(cmd_in)
                 if out == False:
@@ -228,9 +240,9 @@ class CommandExecution(object):
         return {"output": out, "error": "".encode()}
 
 
-class Server(CommandExecution):
+class Server(LinuxCommandExecuter):
     """
-    Server Class inherits CommandExecution
+    Server Class inherits LinuxCommandExecuter
     """
     def __init__(self, hostname, port):
         self.logger = logging.getLogger("server")
@@ -243,6 +255,17 @@ class Server(CommandExecution):
             level=logging.DEBUG
         )
 
+    @staticmethod
+    def recvall(sock):
+        BUFF_SIZE = 2048 # 2 KiB
+        data = b''
+        while True:
+            part = sock.recv(BUFF_SIZE)
+            data += part
+            if len(part) < BUFF_SIZE:
+                break
+        return data
+
     def handle(self, connection:socket.socket, address:tuple):
         """
         For each new client connect to the server, executes this.
@@ -252,33 +275,45 @@ class Server(CommandExecution):
         return None
         """
         logging.basicConfig(level=logging.DEBUG)
-        logger = logging.getLogger("process-%r" % (address,))
+        logger = logging.getLogger("Thread-%r" % (address,))
         try:
             logger.debug("Connected %r at %r", connection, address)
-            while True:
-                data = connection.recv(4080)
-                if not data:
-                    continue
-                try:
-                    data_b64 = eval(base64.b64decode(data))
-                except SyntaxError:
-                    data_b64 = dict()
-                    logging.exception("Unexpected exception: Syntax Error data_b64")
-                if data_b64:
-                    logger.debug("Received data %r", data_b64)
-                    if data_b64["pvs_stdin"]:
-                        res = self.handlePipelineCommand(data_b64)
-                    else:
-                        res = self.handleNonPipelineCommand(data_b64["cmd"])
-                    base64_dict = base64.b64encode(str(res).encode('utf-8'))
-                    logger.debug(base64_dict)
-                    connection.sendall(base64_dict)
-                    logger.debug("Sent data")
+            data = self.recvall(connection) # command getter + pvs output
+            data_b64 = None
+            try:
+                data_b64 = eval(base64.b64decode(data))
+            except SyntaxError as e:
+                logging.exception("Unexpected exception: Syntax Error data_b64")
+                logging.exception(str(e))
+            if data_b64:
+                logger.debug("Received Data from client: %r" %(data_b64,))
+                if data_b64["pvs_stdin"].decode("utf-8"):
+                    res = self.handlePipelineCommand(data_b64)
+                else:
+                    res = self.handleNonPipelineCommand(data_b64["cmd"].decode("utf-8"))
+                base64_dict = base64.b64encode(str(res).encode('utf-8'))
+                connection.sendall(base64_dict)
+                logger.debug("Data is Sent to %r" %(address,))
+            else:
+                res = {
+                    "output": "".encode(), 
+                    "error": "Error while executing previous command".encode()
+                }
+                base64_dict = base64.b64encode(str(res).encode('utf-8'))
+                connection.sendall(base64_dict) 
         except:
             logger.exception("Problem handling request")
+            res = {
+                "output": "".encode(), 
+                "error": "Error while executing previous command".encode()
+            }
+            base64_dict = base64.b64encode(str(res).encode('utf-8'))
+            connection.sendall(base64_dict) 
+
         finally:
-            logger.debug("Closing socket")
+            logger.debug("Closing Thread %r" %(address,))
             sys.exit()
+            logger.debug("Closing socket")
             connection.close()
 
     def start(self):
@@ -298,7 +333,7 @@ class Server(CommandExecution):
             except KeyboardInterrupt:
                 print("\nServer: Keyboard Interrupt".capitalize())
                 logging.info("Shutting down")
-                logging.info("All done")
+                
                 return
             self.logger.debug("Got connection")
             thread = threading.Thread(target=self.handle, args=(conn, address))
@@ -309,7 +344,9 @@ class Server(CommandExecution):
             # process.daemon = True
             # process.start()
             # self.logger.debug("Started process %r", process)
-
+    
+    def __del__(self):
+        logging.info("All done")
 
 if __name__ == "__main__":
     server = Server("0.0.0.0", PORT)

@@ -30,6 +30,18 @@ class Client(object):
     def __init__(self, port:int = PORT):
         self.port = port
 
+    @staticmethod
+    def recvall(sock):
+        BUFF_SIZE = 2048 # 2 KiB
+        data = b''
+        while True:
+            part = sock.recv(BUFF_SIZE)
+            data += part
+            if len(part) < BUFF_SIZE:
+                # either 0 or end of data
+                break
+        return data
+
     def handlePipelineCommands(self, command:str):
         """
         Handle (||) Commands
@@ -56,16 +68,23 @@ class Client(object):
                 print(e)
                 print(CWHITE2)
                 return None
+            
+            if isinstance(data_b64, str): data_b64 = data_b64.encode()
+            data_b64 = """{}""".format(data_b64.decode("utf-8")).encode()
             toSend = {
                 "pvs_stdin": data_b64,
-                "cmd": cmd.strip()
+                "cmd": cmd.strip().encode()
             }
+
             base64_dict = base64.b64encode(str(toSend).encode('utf-8'))
             sock.sendall(base64_dict)
-            data = sock.recv(40800)
+            data = self.recvall(sock)
             sock.close()
             if data:
-                data_b64 = eval(base64.b64decode(data))
+                try:
+                    data_b64 = eval(base64.b64decode(data))
+                except SyntaxError as e:
+                    return "Error in running previous command"
                 if data_b64["error"]:
                     return data_b64["error"].decode("utf-8")
                 else:
@@ -92,11 +111,11 @@ class Client(object):
         
         toSend = {
             "pvs_stdin": "".encode(),
-            "cmd": cmd.strip()
+            "cmd": cmd.strip().encode()
         }
         base64_dict = base64.b64encode(str(toSend).encode('utf-8'))
         sock.sendall(base64_dict)
-        data = sock.recv(40800)
+        data = self.recvall(sock)
         sock.close()
         if data:
             data_b64 = eval(base64.b64decode(data))
