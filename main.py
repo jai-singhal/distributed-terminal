@@ -31,7 +31,7 @@ def main():
             # We are in the parent process.
             server = Server("0.0.0.0", PORT)
             server.start()
-            print(f"Hope you like the project. Star(*) my repository {__repository__} if you like this.")
+            print(f"Hope you like the project. Star(*) my repository {__repository__}")
 
     except OSError:
         sys.exit()

@@ -291,10 +291,10 @@ class Server(LinuxCommandExecuter):
             connection.sendall(base64_dict) 
 
         finally:
-            logger.debug("Closing Thread %r" %(address,))
-            sys.exit()
             logger.debug("Closing socket")
             connection.close()
+            logger.debug("Closing Thread %r" %(address,))
+            sys.exit()
 
     def start(self):
         """
